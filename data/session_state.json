@@ -1,0 +1,9 @@
+{
+    "employees": {
+        "EMP-001": {
+            "assigned_track": "TRACK-AZ-ADMIN",
+            "current_stage": "COMPLETED_ASSESSMENT",
+            "active_quiz": null
+        }
+    }
+}

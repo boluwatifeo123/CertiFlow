@@ -1,0 +1,12 @@
+{
+    "employees": [
+        {
+            "employee_id": "EMP-001",
+            "role": "Synthetic Cloud Operations Associate",
+            "department": "Engineering-A",
+            "assigned_track": "TRACK-AZ-ADMIN",
+            "passing_score_threshold": 80,
+            "current_status": "Not Started"
+        }
+    ]
+}

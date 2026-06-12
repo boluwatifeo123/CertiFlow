@@ -1,0 +1,20 @@
+﻿# Python virtual environments
+.venv/
+venv/
+ENV/
+
+# Environment configurations containing secrets
+.env
+.env.local
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Python caching and compiled bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+
+Description.txt

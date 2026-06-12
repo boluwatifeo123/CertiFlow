@@ -1,0 +1,284 @@
+﻿import os
+import json
+from dotenv import load_dotenv
+from azure.identity import DefaultAzureCredential
+from azure.ai.projects import AIProjectClient
+
+# Load secret infrastructure tokens from your local .env
+load_dotenv()
+
+class AzureAIEngine:
+    """Initializes and manages the cloud control connection to Azure AI Studio."""
+    def __init__(self):
+        self.endpoint = os.getenv("AZURE_AI_PROJECT_ENDPOINT")
+        self.model_deployment = os.getenv("AZURE_AI_MODEL_DEPLOYMENT")
+        
+        if not self.endpoint:
+            raise ValueError("❌ Error: AZURE_AI_PROJECT_ENDPOINT is missing from your .env file!")
+        if not self.model_deployment:
+            raise ValueError("❌ Error: AZURE_AI_MODEL_DEPLOYMENT is missing from your .env file!")
+            
+        print("🔐 Authenticating with Azure Identity...")
+        self.credential = DefaultAzureCredential()
+        
+        print(f"📡 Connecting to Azure AI Project Studio at: {self.endpoint}")
+        # Instantiate the client directly using keyword arguments
+        self.project_client = AIProjectClient(
+            endpoint=self.endpoint,
+            credential=self.credential
+        )
+        print("🚀 Azure AI Client successfully mounted and ready.")
+
+    def ask_llm(self, system_prompt: str, user_prompt: str) -> str:
+        """Helper function to route reasoning queries directly to your deployed model."""
+        try:
+            # We use the project client to get the chat completions client
+            openai_client = self.project_client.get_openai_client()
+
+            response = openai_client.chat.completions.create(
+                model=self.model_deployment,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": system_prompt
+                    },
+                    {
+                        "role": "user",
+                        "content": user_prompt
+                    }
+                ],
+                temperature=0.2
+            )
+
+            return response.choices[0].message.content
+            return response.choices[0].message.content
+        except Exception as e:
+            print(f"💥 Azure AI Inference Error: {e}")
+            return "ERROR: Could not get a reasoned response from the LLM."
+
+
+class CuratorAgent:
+    """Agent responsible for reading the knowledge base (Foundry IQ)."""
+    def __init__(self, knowledge_base_path: str):
+        self.knowledge_base_path = knowledge_base_path
+
+    def extract_learning_modules(self, track_id: str) -> str:
+        print(f"🔍 [CuratorAgent] Scanning local Foundry IQ for track: {track_id}...")
+        with open(self.knowledge_base_path, "r") as f:
+            data = json.load(f)
+        return json.dumps(data)
+
+
+class PlannerAgent:
+    """Agent responsible for contextually scheduling study time using Work IQ."""
+    def __init__(self, schedule_base_path: str, ai_engine: AzureAIEngine):
+        self.schedule_base_path = schedule_base_path
+        self.ai_engine = ai_engine
+
+    def generate_ai_schedule(self, employee_id: str, context_data: str, fabric_context: str) -> str:
+        print(f"🧠 [PlannerAgent] Initiating AI Reasoning Loop for {employee_id}...")
+        
+        with open(self.schedule_base_path, "r") as f:
+            work_data = json.load(f)
+
+        system_instruction =  """
+
+You are the Planner Agent for CertiFlow.
+
+You generate weekly learning schedules by combining data from Foundry IQ, Work IQ, and Fabric IQ.
+
+---
+
+### HARD RULES (must follow)
+1. Never create overlapping events.
+2. Only schedule within preferred learning windows.
+3. Respect all work calendars and blocked times.
+4. Fully utilize available learning slots each week.
+5. Do not partially allocate modules unless time is insufficient.
+6. No duplicate schedule entries.
+
+---
+
+### PLANNING LOGIC
+- Understand employee role and certification track.
+- Break modules into time-based learning sessions.
+- Prioritize sequential completion of modules.
+- Optimize for consistency and workload balance.
+
+---
+
+### OUTPUT FORMAT (STRICT)
+Return ONLY valid JSON.
+
+No markdown.
+No explanations.
+No extra text.
+
+Schema:
+{
+  "employee_id": "",
+  "week": "",
+  "schedule": [
+    {
+      "day": "",
+      "start": "",
+      "end": "",
+      "module": "",
+      "topic": ""
+    }
+  ],
+  "total_hours": "",
+  "summary": ""
+}
+
+"""
+        
+
+        user_input = f"""
+        Employee ID: {employee_id}
+        Company Role & Rules (Fabric IQ Context): {fabric_context}
+        Syllabus Track Modules (Foundry IQ Context): {context_data}
+        Calendar Availability Profile (Work IQ Context): {json.dumps(work_data)}
+        
+        Task: Cross-reference this data. Act as a reasoning engine to map out a clear calendar path.
+        """
+
+        # Call the live model deployment
+        return self.ai_engine.ask_llm(system_instruction, user_input)
+    
+
+class TesterAgent:
+    """Agent responsible for validating employee readiness via targeted assessment generation and grading."""
+    def __init__(self, ai_engine: AzureAIEngine):
+        self.ai_engine = ai_engine
+
+    def generate_quiz(self, foundry_context: str, module_name: str) -> str:
+        """Generates technical questions strictly grounded in the Foundry IQ syllabus documents."""
+        print(f"📝 [TesterAgent] Extracting requirements to generate customized quiz for: {module_name}...")
+        
+        system_instruction = """
+You are the Assessment Agent for CertiFlow. 
+Your task is to generate a short, highly technical 2-question quiz based ONLY on the provided syllabus data.
+
+### OUTPUT FORMAT (STRICT)
+Return ONLY valid JSON. No markdown, no extra text.
+Schema:
+{
+  "module": "",
+  "questions": [
+    {"id": 1, "question": "", "choices": ["A)", "B)", "C)", "D)"], "correct_answer": "A"}
+  ]
+}
+"""
+        user_input = f"Syllabus Context:\n{foundry_context}\n\nGenerate quiz for module: {module_name}"
+        return self.ai_engine.ask_llm(system_instruction, user_input)
+
+    def evaluate_performance(self, quiz_json: str, user_answers: str) -> str:
+        """Executes a multi-step verification process to grade results and issue a pass/fail certificate status."""
+        print("🧮 [TesterAgent] Initiating Multi-Step Reasoning Loop for performance grading...")
+        
+        system_instruction = """
+You are the Verification Core of the CertiFlow TesterAgent. 
+You cross-verify the student's choices against the original quiz schema and compute grading metrics.
+
+### HARD RULES:
+1. Passing score is 100% accuracy on these micro-evaluations.
+2. Output a structured execution result tracking your reasoning steps.
+
+### OUTPUT FORMAT (STRICT)
+Return ONLY valid JSON. No markdown.
+Schema:
+{
+  "grading_step_verified": true,
+  "score_percentage": 100,
+  "verdict": "PASSED" or "FAILED",
+  "feedback": "Brief analysis of performance"
+}
+"""
+        user_input = f"Quiz Template:\n{quiz_json}\n\nEmployee Answers Given:\n{user_answers}"
+        return self.ai_engine.ask_llm(system_instruction, user_input)
+    
+
+
+def run_pipeline(target_employee_id: str):
+    print("====================================================")
+    print(f"🚀 Launching CertiFlow Connected Multi-Agent Pipeline")
+    print("====================================================\n")
+
+    # Initialize the Live Azure Cloud Bridge
+    try:
+        ai_engine = AzureAIEngine()
+    except Exception as e:
+        print(f"\n❌ Pipeline Initialization Failed: {e}")
+        print("💡 Make sure your .env file is filled and you are logged into Azure via your terminal.")
+        return
+
+    # File data anchors
+    foundry_iq_path = "data/foundry_iq.json"
+    work_iq_path = "data/work_iq.json"
+    fabric_iq_path = "data/fabric_iq.json"
+
+    # Step 1: Read employee assignment context from Fabric IQ
+    with open(fabric_iq_path, "r") as f:
+        fabric_data = json.load(f)
+    
+    emp_profile = None
+    for emp in fabric_data.get("employees", []):
+        if emp["employee_id"] == target_employee_id:
+            emp_profile = emp
+            break
+
+    if not emp_profile:
+        print(f"❌ Aborting: Employee {target_employee_id} not found.")
+        return
+
+    # Step 2: Curator reads syllabus documents
+    curator = CuratorAgent(knowledge_base_path=foundry_iq_path)
+    foundry_context = curator.extract_learning_modules(track_id=emp_profile["assigned_track"])
+
+    # Step 3: Planner agent processes everything with the Live Azure AI Brain
+    planner = PlannerAgent(schedule_base_path=work_iq_path, ai_engine=ai_engine)
+    ai_reasoned_schedule = planner.generate_ai_schedule(
+        employee_id=target_employee_id,
+        context_data=foundry_context,
+        fabric_context=json.dumps(emp_profile)
+    )
+
+    print("\n====================================================")
+    print("🎯 LIVE AZURE AI REASONED CALENDAR OUTPUT:")
+    print("====================================================")
+    print(ai_reasoned_schedule)
+
+    # ====================================================
+    # NEW MULTI-STEP REASONING & ASSESSMENT LOOP (STEP 5)
+    # ====================================================
+    print("\n====================================================")
+    print("🧠 ENGAGING AGENT VERIFICATION LOOP (TESTING LAYER)")
+    print("====================================================")
+    
+    tester = TesterAgent(ai_engine=ai_engine)
+    
+    # Generate an explicit test based on the designated curriculum tracks
+    target_module = "Module 1: Core Compute & Storage Fabric"  # Fallback anchor or extracted from profile
+    generated_quiz = tester.generate_quiz(foundry_context=foundry_context, module_name=target_module)
+    
+    print("\n📋 GENERATED EVALUATION FROM FOUNDRY IQ GROUNDING:")
+    print(generated_quiz)
+    
+    # Mocking a synthetic student submission to complete the multi-step verification sequence safely
+    mock_employee_answers = json.dumps({
+        "submission": [
+            {"question_id": 1, "selected_choice": "A"},
+            {"question_id": 2, "selected_choice": "B"}
+        ]
+    })
+    
+    # Process grading and verify rules via the engine
+    grading_verdict = tester.evaluate_performance(quiz_json=generated_quiz, user_answers=mock_employee_answers)
+    
+    print("\n⚖️ AGENT CORE PERFORMANCE REPORT (VERDICT):")
+    print(grading_verdict)
+    print("====================================================")
+    
+if __name__ == "__main__":
+    run_pipeline("EMP-001")

@@ -1,0 +1,65 @@
+{
+    "certification_tracks": [
+        {
+            "track_id": "TRACK-AZ-ADMIN",
+            "track_name": "Synthetic Azure Enterprise Systems Administrator",
+            "description": "Fictional track inspired by enterprise cloud infrastructure scale and access boundaries.",
+            "modules": [
+                {
+                    "module_id": "AZ-MOD-01",
+                    "name": "Module 1: Core Compute & Storage Fabric",
+                    "estimated_hours_required": 6,
+                    "topics": [
+                        "Virtual machine scale sets and regional high-availability mapping",
+                        "Blob storage tiering strategies and lifecycle rules",
+                        "Managed disk encryption keys and replication configurations"
+                    ]
+                },
+                {
+                    "module_id": "AZ-MOD-02",
+                    "name": "Module 2: Virtual Networking & Identity Safeguards",
+                    "estimated_hours_required": 8,
+                    "topics": [
+                        "Virtual network peering, subnet routing policies, and security group rules",
+                        "Role-based access control definition and conditional entry parameters",
+                        "Hybrid cloud network gateway tunnels and cross-region traffic routing"
+                    ]
+                }
+            ]
+        },
+        {
+            "track_id": "TRACK-DP-DATA",
+            "track_name": "Synthetic Enterprise Data Estate Engineering",
+            "description": "Fictional track focused on scalable corporate data assets and privacy structures.",
+            "modules": [
+                {
+                    "module_id": "DP-MOD-01",
+                    "name": "Module 1: Large-Scale Ingestion Fabrics",
+                    "estimated_hours_required": 8,
+                    "topics": [
+                        "Streaming stream-processing architectures and partitioned data lakes",
+                        "Batch extraction, transformation, and load pipeline sequencing",
+                        "Schema drift mitigation strategies within transactional repositories"
+                    ]
+                }
+            ]
+        },
+        {
+            "track_id": "TRACK-AI-ENGINEER",
+            "track_name": "Synthetic Autonomous Intelligent Agent Systems",
+            "description": "Fictional track focused on custom model deployments and multi-agent systems.",
+            "modules": [
+                {
+                    "module_id": "AI-MOD-01",
+                    "name": "Module 1: Grounded Retrieval & Model Provisioning",
+                    "estimated_hours_required": 10,
+                    "topics": [
+                        "Custom large language model endpoint provisioning and prompt engineering",
+                        "Vector database indexing and retrieval-augmented generation chunk optimization",
+                        "Context window optimization and strict systemic token management"
+                    ]
+                }
+            ]
+        }
+    ]
+}

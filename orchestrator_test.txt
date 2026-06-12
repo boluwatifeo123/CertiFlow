@@ -1,0 +1,125 @@
+﻿import os
+import json
+from dotenv import load_dotenv
+
+# Load environment variables from our .env file
+load_dotenv()
+
+class CuratorAgent:
+    """Agent responsible for processing the Foundry IQ (Knowledge Layer)."""
+    def __init__(self, knowledge_base_path: str):
+        self.knowledge_base_path = knowledge_base_path
+
+    def extract_learning_modules(self, track_id: str) -> list:
+        print(f"🔍 [CuratorAgent] Searching Foundry IQ for track: {track_id}...")
+        
+        if not os.path.exists(self.knowledge_base_path):
+            print(f"❌ Error: {self.knowledge_base_path} not found.")
+            return []
+
+        with open(self.knowledge_base_path, "r") as f:
+            data = json.load(f)
+
+        for track in data.get("certification_tracks", []):
+            if track["track_id"] == track_id:
+                print(f"✅ [CuratorAgent] Found track '{track['title']}' with {len(track['modules'])} modules.")
+                return track["modules"]
+        
+        print(f"⚠️ [CuratorAgent] No track matching {track_id} was discovered.")
+        return []
+
+
+class PlannerAgent:
+    """Agent responsible for aligning modules with Work IQ (Calendar / Availability)."""
+    def __init__(self, schedule_base_path: str):
+        self.schedule_base_path = schedule_base_path
+
+    def generate_schedule(self, employee_id: str, modules: list) -> dict:
+        print(f"🗓️ [PlannerAgent] Mapping out schedule context for worker: {employee_id}...")
+
+        if not os.path.exists(self.schedule_base_path):
+            print(f"❌ Error: {self.schedule_base_path} not found.")
+            return {}
+
+        with open(self.schedule_base_path, "r") as f:
+            data = json.load(f)
+
+        # Fetch employee's workspace calendar preferences
+        emp_schedule = None
+        for item in data.get("schedules", []):
+            if item["employee_id"] == employee_id:
+                emp_schedule = item
+                break
+
+        if not emp_schedule:
+            print(f"⚠️ [PlannerAgent] No schedule profile found for {employee_id}.")
+            return {}
+
+        windows = emp_schedule.get("preferred_learning_windows", [])
+        
+        # Simple multi-agent handoff assembly logic
+        final_schedule = {
+            "employee_id": employee_id,
+            "weekly_plan": []
+        }
+
+        # Match modules up to preferred windows round-robin style
+        for index, module in enumerate(modules):
+            window = windows[index % len(windows)] if windows else {"day": "Flexible", "start_time": "TBD", "end_time": "TBD"}
+            final_schedule["weekly_plan"].append({
+                "module_id": module["module_id"],
+                "module_name": module["name"],
+                "allocated_time": f"{window['day']} from {window['start_time']} to {window['end_time']}"
+            })
+
+        print("✅ [PlannerAgent] Smart study calendar generated successfully.")
+        return final_schedule
+
+
+def run_pipeline(target_employee_id: str):
+    print("====================================================")
+    print(f"🚀 Launching CertiFlow Orchestration Engine for {target_employee_id}")
+    print("====================================================\n")
+
+    # Paths to our synthetic data stores
+    foundry_iq_path = "data/foundry_iq.json"
+    work_iq_path = "data/work_iq.json"
+    fabric_iq_path = "data/fabric_iq.json"
+
+    # Step A: Read Employee metadata from Fabric IQ to get their assigned track
+    with open(fabric_iq_path, "r") as f:
+        fabric_data = json.load(f)
+    
+    assigned_track = None
+    for emp in fabric_data.get("employees", []):
+        if emp["employee_id"] == target_employee_id:
+            assigned_track = emp["assigned_track"]
+            break
+
+    if not assigned_track:
+        print(f"❌ Aborting pipeline: Could not find employee data or track assignment for {target_employee_id}")
+        return
+
+    # Step B: Trigger CuratorAgent (Foundry IQ handoff)
+    curator = CuratorAgent(knowledge_base_path=foundry_iq_path)
+    modules_needed = curator.extract_learning_modules(track_id=assigned_track)
+
+    if not modules_needed:
+        print("❌ Aborting pipeline: Curator returned zero modules.")
+        return
+
+    # Step C: Trigger PlannerAgent (Work IQ context mapping)
+    planner = PlannerAgent(schedule_base_path=work_iq_path)
+    personalized_calendar = planner.generate_schedule(employee_id=target_employee_id, modules=modules_needed)
+
+    # Output results cleanly to the screen
+    print("\n====================================================")
+    print("🎯 FINAL REASONED PIPELINE OUTPUT:")
+    print("====================================================")
+    print(json.dumps(personalized_calendar, indent=4))
+    print("====================================================")
+
+
+if __name__ == "__main__":
+    # Test execution for our synthetic employee profile
+    run_pipeline("EMP-001")

@@ -1,0 +1,51 @@
+{
+    "schedules": [
+        {
+            "employee_id": "EMP-001",
+            "weekly_busy_blocks": [
+                {
+                    "day": "Monday",
+                    "start_time": "09:00",
+                    "end_time": "12:00",
+                    "description": "Team Sync & Status"
+                },
+                {
+                    "day": "Tuesday",
+                    "start_time": "13:00",
+                    "end_time": "15:00",
+                    "description": "Architecture Review"
+                },
+                {
+                    "day": "Wednesday",
+                    "start_time": "10:00",
+                    "end_time": "11:30",
+                    "description": "Client Deliverable Review"
+                },
+                {
+                    "day": "Thursday",
+                    "start_time": "14:00",
+                    "end_time": "17:00",
+                    "description": "Deep Focus Dev Sprint"
+                },
+                {
+                    "day": "Friday",
+                    "start_time": "15:00",
+                    "end_time": "17:00",
+                    "description": "Retrospective & Admin"
+                }
+            ],
+            "preferred_learning_windows": [
+                {
+                    "day": "Tuesday",
+                    "start_time": "09:00",
+                    "end_time": "11:00"
+                },
+                {
+                    "day": "Thursday",
+                    "start_time": "09:00",
+                    "end_time": "11:00"
+                }
+            ]
+        }
+    ]
+}
