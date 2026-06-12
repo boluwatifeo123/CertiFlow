@@ -142,13 +142,8 @@ flowchart TD
 - No real employee records, customer records, or personal data are included.
 - Keep `.env` out of source control.
 
-## Demo Notes
 
-If Azure authentication is not available in your shell, the model calls will fail gracefully, but the state and inspection layers will still be visible.
 
-## Suggested Next Step
-
-If you want to present this in a strong way for judges, add:
 
 - an architecture diagram,
 - a short demo video,
