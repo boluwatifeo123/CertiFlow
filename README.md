@@ -154,4 +154,4 @@ If you want to present this in a strong way for judges, add:
 - a short demo video,
 - and a brief explanation of the agent loop and telemetry layer.
 
-If you want a more polished version later, export the same structure as a PNG or SVG using a diagram tool.
+
