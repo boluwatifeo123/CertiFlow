@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -9,6 +9,11 @@ from orchestrator import run_pipeline_step_with_result, CertiFlowOrchestrator, _
 app = FastAPI(title="CertiFlow Backend")
 app.mount("/ui", StaticFiles(directory="static"), name="static")
 
+# Global instance for shared state and credential caching
+orchestrator_instance = CertiFlowOrchestrator()
+
+def get_orchestrator():
+    return orchestrator_instance
 
 @app.get("/")
 async def root_ui():
@@ -41,8 +46,7 @@ async def pipeline_step(request: PipelineRequest):
 
 
 @app.get("/state/{employee_id}")
-async def get_employee_state(employee_id: str):
-    orchestrator = CertiFlowOrchestrator()
+async def get_employee_state(employee_id: str, orchestrator: CertiFlowOrchestrator = Depends(get_orchestrator)):
     state = orchestrator.get_employee_state(employee_id)
     if not state:
         raise HTTPException(status_code=404, detail="Employee not found")
@@ -50,8 +54,7 @@ async def get_employee_state(employee_id: str):
 
 
 @app.get("/telemetry/{employee_id}")
-async def get_employee_telemetry(employee_id: str):
-    orchestrator = CertiFlowOrchestrator()
+async def get_employee_telemetry(employee_id: str, orchestrator: CertiFlowOrchestrator = Depends(get_orchestrator)):
     telemetry = orchestrator.get_employee_telemetry(employee_id)
     if not telemetry:
         raise HTTPException(status_code=404, detail="Employee telemetry not found")
@@ -59,13 +62,11 @@ async def get_employee_telemetry(employee_id: str):
 
 
 @app.get("/inspection")
-async def get_inspection_report():
-    orchestrator = CertiFlowOrchestrator()
+async def get_inspection_report(orchestrator: CertiFlowOrchestrator = Depends(get_orchestrator)):
     report = orchestrator.build_inspection_report()
     return report
 
 
 @app.get("/dashboard")
-async def get_dashboard():
-    orchestrator = CertiFlowOrchestrator()
+async def get_dashboard(orchestrator: CertiFlowOrchestrator = Depends(get_orchestrator)):
     return orchestrator.telemetry.get("manager_insights", {})

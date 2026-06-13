@@ -1,22 +1,15 @@
-﻿import os
+import os
 import json
 import re
 import sys
 from copy import deepcopy
 from typing import Any, Optional
 
-try:
-    from dotenv import load_dotenv
-except ImportError:
-    def load_dotenv(*args, **kwargs):
-        return None
+from dotenv import load_dotenv
 
-try:
-    from azure.identity import DefaultAzureCredential
-    from azure.ai.projects import AIProjectClient
-except ImportError:
-    DefaultAzureCredential = None
-    AIProjectClient = None
+# Azure SDK imports are optional; provide placeholders if unavailable.
+from azure.identity import DefaultAzureCredential
+from azure.ai.projects import AIProjectClient
 
 load_dotenv()
 
@@ -85,14 +78,19 @@ def _json_schema_response_format(name: str, schema: dict) -> dict:
         },
     }
 
+class CertiFlowError(Exception):
+    """Base exception for CertiFlow."""
+    pass
+
+class AIInferenceError(CertiFlowError):
+    """Raised when an LLM call fails."""
+    pass
+
 class AzureAIEngine:
     """Initializes and manages the cloud control connection to Azure AI Studio."""
     def __init__(self):
         self.endpoint = os.getenv("AZURE_AI_PROJECT_ENDPOINT")
         self.model_deployment = os.getenv("AZURE_AI_MODEL_DEPLOYMENT")
-
-        if DefaultAzureCredential is None or AIProjectClient is None:
-            raise RuntimeError("Azure SDK imports are unavailable in this environment.")
 
         if not self.endpoint or not self.model_deployment:
             raise ValueError("❌ Error: Missing Azure AI environment variables in .env")
@@ -125,9 +123,7 @@ class AzureAIEngine:
             response = openai_client.chat.completions.create(**request_kwargs)
             return response.choices[0].message.content
         except Exception as e:
-            print(f"💥 Azure AI Inference Error: {e}")
-            return "ERROR: Inference failure."
-
+            raise AIInferenceError(f"Azure AI Inference Error: {e}") from e
 
 class CuratorAgent:
     def __init__(self, knowledge_base_path: str):
@@ -155,8 +151,8 @@ class CuratorAgent:
         raise ValueError(f"Track '{track_id}' was not found in {self.knowledge_base_path}")
 
 
-class StudyPlanGenerator:
-    """Generates capability-aware, workload-balanced study schedules using Fabric IQ and Work IQ context."""
+class PlannerAgent:
+    """Orchestrates study plan generation using Fabric IQ and Work IQ context."""
     def __init__(self, schedule_base_path: str, fabric_base_path: str, ai_engine: AzureAIEngine):
         self.schedule_base_path = schedule_base_path
         self.fabric_base_path = fabric_base_path
@@ -400,29 +396,20 @@ class StudyPlanGenerator:
         return json.dumps({"weekly_learning_schedule": schedule})
 
 
-class PlannerAgent:
-    """Orchestrates study plan generation using StudyPlanGenerator."""
-    def __init__(self, schedule_base_path: str, fabric_base_path: str, ai_engine: AzureAIEngine):
-        self.schedule_base_path = schedule_base_path
-        self.fabric_base_path = fabric_base_path
-        self.ai_engine = ai_engine
-        self.plan_generator = StudyPlanGenerator(schedule_base_path, fabric_base_path, ai_engine)
-
-    def generate_ai_schedule(self, employee_id: str, context_data: str, employee_profile: dict) -> str:
-        """Generate AI schedule delegating to StudyPlanGenerator."""
-        return self.plan_generator.generate_ai_schedule(employee_id, context_data, employee_profile)
-    
-
 class TesterAgent:
     def __init__(self, ai_engine: AzureAIEngine):
         self.ai_engine = ai_engine
 
     @staticmethod
     def _normalize_question_id(question_id: Any) -> str:
-        text = str(question_id).strip().upper()
-        if text.startswith("Q"):
-            return text
-        return f"Q{text}"
+        """Extract the last numeric component from an ID to allow '1' to match 'AZ-MOD-01-Q1'."""
+        text = str(question_id).strip()
+        # Find all sequences of digits in the ID
+        numbers = re.findall(r'\d+', text)
+        if numbers:
+            # Return the last sequence found, normalized (e.g. '01' -> '1')
+            return str(int(numbers[-1]))
+        return text.upper()
 
     @staticmethod
     def _parse_submission_answers(user_answers: str) -> dict[str, Any]:
@@ -458,7 +445,8 @@ class TesterAgent:
             "You are the Assessment Agent for CertiFlow.\n"
             "Generate exactly two quiz questions grounded only in the provided syllabus.\n"
             "Return only JSON that matches the supplied schema.\n"
-            "Do not add markdown, extra keys, explanations, or prose."
+            "Do not add markdown, extra keys, explanations, or prose.\n"
+            "Ensure question text implies grounding by referencing the specific module or topic."
         )
         response_schema = _json_schema_response_format(
             "certiflow_quiz",
@@ -495,7 +483,7 @@ class TesterAgent:
         user_input = f"Context: {foundry_context}\nModule: {module_name}"
         return self.ai_engine.ask_llm(system_instruction, user_input, response_format=response_schema)
 
-    def evaluate_performance(self, quiz_json: str, user_answers: str, foundry_context: str) -> str:
+    def evaluate_performance(self, quiz_json: str, user_answers: str, foundry_context: str, passing_threshold: int = 75) -> str:
         quiz_payload = _extract_json_payload(quiz_json)
         if not isinstance(quiz_payload, dict):
             raise ValueError("Quiz payload must be a JSON object.")
@@ -512,10 +500,24 @@ class TesterAgent:
             if not isinstance(question, dict):
                 continue
 
-            question_id = self._normalize_question_id(question.get("question_id"))
-            selected_choice = answer_map.get(question_id)
+            orig_id = question.get("question_id", "UNKNOWN")
+            norm_id = self._normalize_question_id(orig_id)
+            selected_choice = answer_map.get(norm_id)
+            options = question.get("options", [])
             correct_answer = question.get("correct_answer")
-            is_correct = selected_choice == correct_answer
+
+            # Logic to resolve letter choices (A, B, C, D) to actual option text
+            letter_to_idx = {"A": 0, "B": 1, "C": 2, "D": 3}
+            resolved_user_text = selected_choice
+
+            if isinstance(selected_choice, str) and selected_choice.upper() in letter_to_idx:
+                idx = letter_to_idx[selected_choice.upper()]
+                if idx < len(options):
+                    resolved_user_text = options[idx]
+            
+            # Compare the resolved text against the correct answer string
+            is_correct = (resolved_user_text == correct_answer)
+
             module_name = quiz_payload.get("module", "the current module")
             study_recommendation = self._build_study_recommendation(
                 module_name=module_name,
@@ -524,7 +526,8 @@ class TesterAgent:
             )
 
             trace_item = {
-                "question_id": question_id,
+                "question_id": orig_id,
+                "normalized_id": norm_id,
                 "selected_choice": selected_choice,
                 "correct_answer": correct_answer,
                 "status": "correct" if is_correct else "incorrect",
@@ -535,15 +538,17 @@ class TesterAgent:
             if not is_correct:
                 wrong_items.append(
                     {
-                        "question_id": question_id,
+                        "question_id": orig_id,
                         "question": question.get("question", ""),
                         "selected_choice": selected_choice,
                         "correct_answer": correct_answer,
                     }
                 )
 
-        score_percentage = round((len(quiz_questions) and sum(1 for item in verification_trace if item["status"] == "correct") or 0) / max(len(quiz_questions), 1) * 100)
-        verdict = "PASSED" if score_percentage == 100 else "FAILED"
+        correct_count = sum(1 for item in verification_trace if item["status"] == "correct")
+        total_questions = len(quiz_questions)
+        score_percentage = round((correct_count / total_questions) * 100) if total_questions > 0 else 0
+        verdict = "PASSED" if score_percentage >= passing_threshold else "FAILED"
 
         reasoning_trace = []
         if wrong_items:
@@ -779,7 +784,7 @@ class ManagerInsightsAgent:
 
         system_instruction = (
             "You are the Manager Insights reasoning node for CertiFlow.\n"
-            "Use the provided synthetic metrics to synthesize an executive dashboard narrative.\n"
+            "Use the provided synthetic metrics to synthesize an executive dashboard narrative. Explicitly reference Foundry IQ (readiness), Work IQ (scheduling), and Fabric IQ (role context) in your analysis.\n"
             "Do not invent data. Return only JSON matching the supplied schema."
         )
         response_schema = _json_schema_response_format(
@@ -1077,191 +1082,12 @@ class CertiFlowOrchestrator:
 
 
 def run_pipeline_step(target_employee_id: str, requested_action: str, target_module: str = None, submission_payload: str = None):
-    print(f"\n⚙️ [Orchestrator] Invoking action: '{requested_action}' for {target_employee_id}")
-    foundry_iq_path = "data/foundry_iq.json"
-    work_iq_path = "data/work_iq.json"
-    fabric_iq_path = "data/fabric_iq.json"
-
-    try:
-        ai_engine = AzureAIEngine()
-        orchestrator = CertiFlowOrchestrator()
-
-        fabric_data = _load_json_file(fabric_iq_path)
-        emp_profile = next((e for e in fabric_data.get("employees", []) if e.get("employee_id") == target_employee_id), None)
-        if not emp_profile:
-            print(f"❌ Employee {target_employee_id} not found.")
-            return
-
-        orchestrator.initialize_employee_state(target_employee_id, emp_profile["assigned_track"], emp_profile["role"])
-        emp_state = orchestrator.get_employee_state(target_employee_id)
-    except Exception as e:
-        print(f"❌ Failed to initialize workflow: {e}")
-        return
-
-    before_employee_state = json.loads(json.dumps(emp_state))
-
-    # ACTION 1: Generate or refresh schedule
-    if requested_action == "GENERATE_SCHEDULE":
-        try:
-            curator = CuratorAgent(knowledge_base_path=foundry_iq_path)
-            foundry_context = curator.extract_learning_modules(track_id=emp_state["assigned_track"])
-
-            planner = PlannerAgent(schedule_base_path=work_iq_path, fabric_base_path=fabric_iq_path, ai_engine=ai_engine)
-            ai_schedule = planner.generate_ai_schedule(target_employee_id, foundry_context, emp_profile)
-            if ai_schedule.startswith("ERROR:"):
-                raise RuntimeError(ai_schedule)
-            schedule_data = _extract_json_payload(ai_schedule)
-
-            orchestrator.update_stage(target_employee_id, "SCHEDULED", "schedule", schedule_data)
-            orchestrator.record_inspection_event(
-                action="GENERATE_SCHEDULE",
-                employee_id=target_employee_id,
-                before_state=before_employee_state,
-                after_state=orchestrator.get_employee_state(target_employee_id),
-                inputs={
-                    "target_module": target_module,
-                    "submission_payload": submission_payload,
-                    "employee_profile": emp_profile,
-                },
-                note="Schedule generated from Foundry IQ + Work IQ + Fabric IQ context with constraint enforcement.",
-            )
-            print("✅ Schedule generated and committed to persistent state ledger.")
-        except Exception as e:
-            print(f"❌ Schedule generation failed: {e}")
-            return
-
-    # ACTION 2: Generate Quiz
-    elif requested_action == "GENERATE_QUIZ":
-        if not target_module:
-            print("❌ Target module required for quiz generation.")
-            return
-        try:
-            curator = CuratorAgent(knowledge_base_path=foundry_iq_path)
-            foundry_context = curator.extract_learning_modules(track_id=emp_state["assigned_track"])
-
-            tester = TesterAgent(ai_engine=ai_engine)
-            quiz_json = tester.generate_quiz(foundry_context, target_module)
-            if quiz_json.startswith("ERROR:"):
-                raise RuntimeError(quiz_json)
-            quiz_data = _extract_json_payload(quiz_json)
-
-            orchestrator.update_stage(target_employee_id, "QUIZ_PENDING", "active_quiz", quiz_data)
-            orchestrator.record_inspection_event(
-                action="GENERATE_QUIZ",
-                employee_id=target_employee_id,
-                before_state=before_employee_state,
-                after_state=orchestrator.get_employee_state(target_employee_id),
-                inputs={
-                    "target_module": target_module,
-                    "employee_profile": emp_profile,
-                },
-                note="Quiz generated from Foundry IQ retrieval trace.",
-            )
-            print("✅ Quiz generated and saved to active state. Waiting for submission.")
-        except Exception as e:
-            print(f"❌ Quiz generation failed: {e}")
-            return
-
-    # ACTION 3: Grade Answers
-    elif requested_action == "SUBMIT_ANSWERS":
-        if not emp_state.get("active_quiz") or not submission_payload:
-            print("❌ No active quiz state or empty submission found.")
-            return
-
-        try:
-            curator = CuratorAgent(knowledge_base_path=foundry_iq_path)
-            foundry_context = curator.extract_learning_modules(track_id=emp_state["assigned_track"])
-            tester = TesterAgent(ai_engine=ai_engine)
-            grading_verdict = tester.evaluate_performance(
-                json.dumps(emp_state["active_quiz"]),
-                submission_payload,
-                foundry_context,
-            )
-            verdict_data = _parse_model_json(grading_verdict, "Grading response")
-
-            current_history = emp_state.get("quiz_submissions", [])
-            current_history.append({
-                "module": emp_state["active_quiz"].get("module"),
-                "verdict": verdict_data
-            })
-
-            orchestrator.update_stage(target_employee_id, "COMPLETED_ASSESSMENT", "quiz_submissions", current_history)
-            orchestrator.update_stage(target_employee_id, "COMPLETED_ASSESSMENT", "active_quiz", None)
-            orchestrator.record_inspection_event(
-                action="SUBMIT_ANSWERS",
-                employee_id=target_employee_id,
-                before_state=before_employee_state,
-                after_state=orchestrator.get_employee_state(target_employee_id),
-                inputs={
-                    "submission_payload": submission_payload,
-                    "active_quiz": emp_state.get("active_quiz"),
-                    "foundry_context": foundry_context,
-                },
-                note="Verifier loop compared submission to quiz and Foundry context.",
-            )
-            if verdict_data.get("verdict") == "FAILED" and "raw_response" in verdict_data:
-                print("⚠️ Grading response was not valid JSON, so a fallback failed verdict was saved.")
-                print(f"Raw response: {verdict_data['raw_response']}")
-            else:
-                print("✅ Evaluation processed successfully. Verdict history updated.")
-        except Exception as e:
-            print(f"❌ Grading failed: {e}")
-            return
-    elif requested_action == "ENGAGEMENT_NUDGE":
-        try:
-            engagement_agent = EngagementAgent(work_base_path=work_iq_path, ai_engine=ai_engine)
-            nudge_json = engagement_agent.generate_nudge(target_employee_id, emp_profile)
-            nudge_data = _parse_model_json(nudge_json, "Engagement response")
-
-            orchestrator.update_stage(target_employee_id, emp_state["current_stage"], "last_engagement_nudge", nudge_data)
-            orchestrator.record_inspection_event(
-                action="ENGAGEMENT_NUDGE",
-                employee_id=target_employee_id,
-                before_state=before_employee_state,
-                after_state=orchestrator.get_employee_state(target_employee_id),
-                inputs={
-                    "employee_profile": emp_profile,
-                    "work_schedule": _load_json_file(work_iq_path),
-                },
-                note="Engagement reminder generated from Work IQ focus window analysis.",
-            )
-            print("✅ Engagement nudge generated and stored.")
-            print(json.dumps(nudge_data, indent=4))
-        except Exception as e:
-            print(f"❌ Engagement generation failed: {e}")
-            return
-    elif requested_action == "MANAGER_INSIGHTS":
-        try:
-            manager_agent = ManagerInsightsAgent(
-                session_state_path="data/session_state.json",
-                telemetry_path="data/system_telemetry.json",
-                fabric_base_path=fabric_iq_path,
-                ai_engine=ai_engine,
-            )
-            dashboard_data = manager_agent.generate_dashboard()
-            orchestrator.save_team_insights(dashboard_data)
-            safe_report = orchestrator.build_inspection_report(include_inspection_log=False)
-            orchestrator.record_inspection_event(
-                action="MANAGER_INSIGHTS",
-                employee_id=None,
-                before_state=before_employee_state,
-                after_state=safe_report,
-                inputs={
-                    "session_state": orchestrator.state,
-                },
-                note="Executive dashboard synthesized from current backend state and team telemetry.",
-            )
-            print("✅ Manager insights dashboard generated and rendered.")
-            print(manager_agent.render_dashboard(dashboard_data))
-        except Exception as e:
-            print(f"❌ Manager insights failed: {e}")
-            return
-    elif requested_action == "GENERATE_INSPECTION_REPORT":
-        report = orchestrator.build_inspection_report()
-        print(CertiFlowOrchestrator.render_inspection_report(report))
+    """Helper to run pipeline and print results to stdout."""
+    res = run_pipeline_step_with_result(target_employee_id, requested_action, target_module, submission_payload)
+    if res["success"]:
+        print(f"✅ {res['message']}")
     else:
-        print(f"❌ Unknown requested action: {requested_action}")
-
+        print(f"❌ {res['error']}")
 
 def run_pipeline_step_with_result(target_employee_id: str, requested_action: str, target_module: str = None, submission_payload: str = None) -> dict:
     """Run a pipeline step and return structured results for API or programmatic use."""
@@ -1294,6 +1120,7 @@ def run_pipeline_step_with_result(target_employee_id: str, requested_action: str
         return result
 
     before_employee_state = json.loads(json.dumps(emp_state))
+    inspection_note = ""
 
     try:
         if requested_action == "GENERATE_SCHEDULE":
@@ -1302,12 +1129,11 @@ def run_pipeline_step_with_result(target_employee_id: str, requested_action: str
 
             planner = PlannerAgent(schedule_base_path=work_iq_path, fabric_base_path=fabric_iq_path, ai_engine=ai_engine)
             ai_schedule = planner.generate_ai_schedule(target_employee_id, foundry_context, emp_profile)
-            if ai_schedule.startswith("ERROR:"):
-                raise RuntimeError(ai_schedule)
             schedule_data = _extract_json_payload(ai_schedule)
 
             orchestrator.update_stage(target_employee_id, "SCHEDULED", "schedule", schedule_data)
             result["message"] = "Schedule generated and committed to persistent state ledger."
+            inspection_note = "Schedule generated from Foundry IQ + Work IQ + Fabric IQ context."
 
         elif requested_action == "GENERATE_QUIZ":
             if not target_module:
@@ -1318,12 +1144,18 @@ def run_pipeline_step_with_result(target_employee_id: str, requested_action: str
 
             tester = TesterAgent(ai_engine=ai_engine)
             quiz_json = tester.generate_quiz(foundry_context, target_module)
-            if quiz_json.startswith("ERROR:"):
-                raise RuntimeError(quiz_json)
             quiz_data = _extract_json_payload(quiz_json)
 
             orchestrator.update_stage(target_employee_id, "QUIZ_PENDING", "active_quiz", quiz_data)
-            result["message"] = "Quiz generated and saved to active state. Waiting for submission."
+            inspection_note = "Quiz generated from Foundry IQ retrieval trace."
+            
+            # Generate a helper template for the UI to make answering easier
+            template = {"submission": []}
+            for q in quiz_data.get("quiz", []):
+                template["submission"].append({"question_id": q.get("question_id"), "selected_choice": ""})
+            
+            result["message"] = "Quiz generated. Use the submission_template to provide your answers."
+            result["submission_template"] = template
 
         elif requested_action == "SUBMIT_ANSWERS":
             if not emp_state.get("active_quiz") or not submission_payload:
@@ -1336,18 +1168,50 @@ def run_pipeline_step_with_result(target_employee_id: str, requested_action: str
                 json.dumps(emp_state["active_quiz"]),
                 submission_payload,
                 foundry_context,
+                passing_threshold=emp_profile.get("passing_score_threshold", 75)
             )
             verdict_data = _parse_model_json(grading_verdict, "Grading response")
+
+            # Agentic Loop: Determine if the learner passed or needs to revisit material
+            is_failed = verdict_data.get("verdict") == "FAILED"
+            next_stage = "NEEDS_REVISION" if is_failed else "COMPLETED_ASSESSMENT"
+            
+            # Requirement: If pass, recommend next step.
+            next_recommendation = None
+            if not is_failed:
+                # Find the current track modules to suggest the next one
+                modules = json.loads(foundry_context).get("modules", [])
+                current_mod_id = emp_state.get("active_quiz", {}).get("module_id")
+                
+                # Simple logic to find the next module in the sequence
+                found_current = False
+                for mod in modules:
+                    if found_current:
+                        next_recommendation = f"Next Step: Proceed to {mod.get('name')}."
+                        break
+                    if mod.get("name") == emp_state["active_quiz"].get("module"):
+                        found_current = True
+                
+                if not next_recommendation:
+                    next_recommendation = "Certification Path Complete! Consult Manager for advanced Fabric IQ role advancement."
 
             current_history = emp_state.get("quiz_submissions", [])
             current_history.append({
                 "module": emp_state["active_quiz"].get("module"),
                 "verdict": verdict_data,
+                "re_study_required": is_failed,
+                "advancement_recommendation": next_recommendation
             })
 
-            orchestrator.update_stage(target_employee_id, "COMPLETED_ASSESSMENT", "quiz_submissions", current_history)
-            orchestrator.update_stage(target_employee_id, "COMPLETED_ASSESSMENT", "active_quiz", None)
-            result["message"] = "Evaluation processed successfully. Verdict history updated."
+            orchestrator.update_stage(target_employee_id, next_stage, "quiz_submissions", current_history)
+            orchestrator.update_stage(target_employee_id, next_stage, "active_quiz", None)
+
+            if is_failed:
+                result["message"] = f"Evaluation processed. Score: {verdict_data.get('score_percentage')}% below threshold. Loop-back triggered: Module flagged for revision."
+                inspection_note = "Verifier loop identified knowledge gaps. System redirected learner back to preparation workflow."
+            else:
+                result["message"] = f"Assessment passed! {next_recommendation}"
+                inspection_note = f"Verifier loop confirmed competency. Recommended: {next_recommendation}"
 
         elif requested_action == "ENGAGEMENT_NUDGE":
             engagement_agent = EngagementAgent(work_base_path=work_iq_path, ai_engine=ai_engine)
@@ -1356,6 +1220,7 @@ def run_pipeline_step_with_result(target_employee_id: str, requested_action: str
 
             orchestrator.update_stage(target_employee_id, emp_state["current_stage"], "last_engagement_nudge", nudge_data)
             result["message"] = "Engagement nudge generated and stored."
+            inspection_note = "Engagement reminder generated from Work IQ window analysis."
 
         elif requested_action == "MANAGER_INSIGHTS":
             manager_agent = ManagerInsightsAgent(
@@ -1367,17 +1232,28 @@ def run_pipeline_step_with_result(target_employee_id: str, requested_action: str
             dashboard_data = manager_agent.generate_dashboard()
             orchestrator.save_team_insights(dashboard_data)
             result["message"] = "Manager insights dashboard generated and rendered."
+            inspection_note = "Dashboard synthesized from back-end state and team telemetry."
 
         elif requested_action == "GENERATE_INSPECTION_REPORT":
             report = orchestrator.build_inspection_report()
             result["message"] = "Inspection report created."
             result["report"] = report
+            return result
 
         else:
             raise ValueError(f"Unknown requested action: {requested_action}")
 
         result["success"] = True
         result["state"] = orchestrator.get_employee_state(target_employee_id)
+
+        orchestrator.record_inspection_event(
+            action=requested_action,
+            employee_id=target_employee_id,
+            before_state=before_employee_state,
+            after_state=orchestrator.get_employee_state(target_employee_id),
+            inputs={"target_module": target_module, "submission_payload": submission_payload},
+            note=inspection_note,
+        )
     except Exception as e:
         result["error"] = str(e)
 
@@ -1389,12 +1265,20 @@ if __name__ == "__main__":
     run_pipeline_step("EMP-001", "GENERATE_SCHEDULE")
     run_pipeline_step("EMP-001", "GENERATE_QUIZ", target_module="Module 1: Core Compute & Storage Fabric")
 
-    mock_submission = json.dumps({
-        "submission": [
-            {"question_id": 1, "selected_choice": "A"},
-            {"question_id": 2, "selected_choice": "B"}
-        ]
-    })
-    run_pipeline_step("EMP-001", "SUBMIT_ANSWERS", submission_payload=mock_submission)
+    # Dynamically get question IDs from the generated quiz for the mock submission
+    orchestrator = CertiFlowOrchestrator() # Re-initialize to get latest state
+    emp_state = orchestrator.get_employee_state("EMP-001")
+    active_quiz = emp_state.get("active_quiz")
+
+    if active_quiz and active_quiz.get("quiz"):
+        question_ids = [q.get("question_id") for q in active_quiz["quiz"]]
+        mock_submission = json.dumps({
+            "submission": [
+                {"question_id": question_ids[0], "selected_choice": "A"},
+                {"question_id": question_ids[1], "selected_choice": "B"}
+            ]
+        })
+        run_pipeline_step("EMP-001", "SUBMIT_ANSWERS", submission_payload=mock_submission)
+
     run_pipeline_step("EMP-001", "ENGAGEMENT_NUDGE")
     run_pipeline_step("EMP-001", "MANAGER_INSIGHTS")

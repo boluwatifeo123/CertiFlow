@@ -1,98 +1,790 @@
 <!doctype html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>CertiFlow UI</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 24px; }
-    .row { margin-bottom: 12px }
-    textarea { width: 100%; height: 120px; }
-    input[type=text] { width: 60%; }
-    button { margin-left: 8px; }
-    pre { background:#f6f8fa; padding:12px; overflow:auto; }
-  </style>
+  <title>CertiFlow — Reasoning Enterprise Learning Platform</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
-  <h1>CertiFlow Quick UI</h1>
 
-  <div class="row">
-    <label>Employee ID: <input id="employeeId" type="text" value="EMP-001"/></label>
+  <!-- Header Panel -->
+  <header>
+    <div class="logo-container">
+      <div class="logo-icon">CF</div>
+      <div>
+        <h1>CertiFlow</h1>
+        <div class="subtitle">Multi-Agent Enterprise Learning</div>
+      </div>
+    </div>
+    <div class="user-selector">
+      <label for="employeeId">Select Employee Profile:</label>
+      <select id="employeeId" onchange="loadEmployeeInfo()">
+        <option value="EMP-001">EMP-001 (Cloud Ops Associate)</option>
+        <option value="EMP-002">EMP-002 (Custom Demo Profile)</option>
+      </select>
+      <button class="btn btn-outline" style="padding: 6px 12px; font-size:11px;" onclick="loadEmployeeInfo()">Refresh
+        State</button>
+    </div>
+  </header>
+
+  <!-- Alert Banner -->
+  <div id="alertBanner" class="alert" style="display: none;"></div>
+
+  <!-- Dashboard Grid -->
+  <div class="dashboard-grid">
+
+    <!-- Sidebar Controls -->
+    <div class="sidebar">
+
+      <!-- Employee Profile / State Panel -->
+      <div class="panel">
+        <div class="panel-title">
+          <span>Learner Profile</span>
+          <span id="learnerBadge" class="badge-status badge-initialized">Initialized</span>
+        </div>
+        <div class="status-card">
+          <div class="status-row">
+            <span class="status-label">Assigned Track:</span>
+            <span class="status-val" id="profileTrack">TRACK-AZ-ADMIN</span>
+          </div>
+          <div class="status-row">
+            <span class="status-label">Business Role:</span>
+            <span class="status-val" id="profileRole">Synthetic Cloud Operations Associate</span>
+          </div>
+          <div style="margin-top: 6px;">
+            <div class="status-row" style="margin-bottom: 4px;">
+              <span class="status-label">Estimated Progress:</span>
+              <span class="status-val" id="progressVal">0%</span>
+            </div>
+            <div class="progress-bar-container">
+              <div class="progress-bar-fill" id="progressBar" style="width: 0%;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Panel -->
+      <div class="panel">
+        <div class="panel-title">Orchestration Control Plane</div>
+
+        <div class="action-list">
+          <div class="input-group">
+            <label>1. Planning Phase</label>
+            <button class="btn btn-primary" onclick="callAction('GENERATE_SCHEDULE')">
+              🗓️ Generate Study Schedule
+            </button>
+          </div>
+
+          <div class="input-group">
+            <label>2. Engagement Trigger</label>
+            <button class="btn btn-secondary" onclick="callAction('ENGAGEMENT_NUDGE')">
+              💬 Get Best Study Window Nudge
+            </button>
+          </div>
+
+          <div class="input-group">
+            <label>3. Assessment Modules</label>
+            <input id="targetModule" class="input-control" type="text" value="Module 1: Core Compute & Storage Fabric"
+              placeholder="Enter target module name" />
+            <button class="btn btn-outline" style="margin-top: 8px;" onclick="callAction('GENERATE_QUIZ')">
+              📝 Generate Grounded Quiz
+            </button>
+          </div>
+
+          <div class="input-group"
+            style="margin-bottom: 0; border-top: 1px solid var(--border-color); padding-top: 16px;">
+            <label>Manager Oversight & Inspection</label>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-outline" style="flex: 1;" onclick="callAction('MANAGER_INSIGHTS')">
+                📊 Refresh Insights
+              </button>
+              <button class="btn btn-outline" style="flex: 1;" onclick="getInspection()">
+                🔍 Inspect Logs
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Main Workspace Workspace -->
+    <div class="panel" style="min-height: 550px;">
+      <div class="workspace-header">
+        <div class="workspace-title" id="workspaceTitle">Study Plan & Schedule</div>
+        <div class="tabs-nav">
+          <button class="tab-btn active" id="tab-schedule" onclick="switchTab('schedule')">Schedule</button>
+          <button class="tab-btn" id="tab-quiz" onclick="switchTab('quiz')">Quiz Assessment</button>
+          <button class="tab-btn" id="tab-dashboard" onclick="switchTab('dashboard')">Manager Dashboard</button>
+          <button class="tab-btn" id="tab-inspection" onclick="switchTab('inspection')">Audit Logs</button>
+          <button class="tab-btn" id="tab-raw" onclick="switchTab('raw')">Raw JSON</button>
+        </div>
+      </div>
+
+      <div class="workspace-body fade-in" id="workspaceContent">
+        <!-- Renderings injected dynamically via Javascript -->
+      </div>
+    </div>
+
   </div>
 
-  <div class="row">
-    <button onclick="callAction('GENERATE_SCHEDULE')">Generate Schedule</button>
-    <button onclick="callAction('ENGAGEMENT_NUDGE')">Engagement Nudge</button>
-    <button onclick="callAction('MANAGER_INSIGHTS')">Manager Insights</button>
-  </div>
+  <script>
+    // State Tracking
+    let currentEmployeeId = 'EMP-001';
+    let currentTab = 'schedule';
+    let currentEmployeeState = null;
+    let currentDashboardData = null;
+    let currentInspectionReport = null;
+    let activeQuizTemplate = null;
 
-  <div class="row">
-    <label>Target Module: <input id="targetModule" type="text" placeholder="Module 1: ..."/></label>
-    <button onclick="callAction('GENERATE_QUIZ')">Generate Quiz</button>
-  </div>
+    // Run on startup
+    window.addEventListener('DOMContentLoaded', () => {
+      loadEmployeeInfo();
+    });
 
-  <div class="row">
-    <label>Submission Payload (JSON):</label>
-    <textarea id="submissionPayload">{"submission":[{"question_id":1,"selected_choice":"A"}]}</textarea>
-    <button onclick="callAction('SUBMIT_ANSWERS')">Submit Answers</button>
-  </div>
+    async function loadEmployeeInfo() {
+      currentEmployeeId = document.getElementById('employeeId').value;
+      showAlert(null); // Hide any alerts
 
-  <h2>Quick Queries</h2>
-  <div class="row">
-    <button onclick="getState()">Get State</button>
-    <button onclick="getTelemetry()">Get Telemetry</button>
-    <button onclick="getDashboard()">Get Dashboard</button>
-    <button onclick="getInspection()">Get Inspection</button>
-  </div>
+      try {
+        const res = await fetch(`/state/${currentEmployeeId}`);
+        if (!res.ok) {
+          // If 404, let's try to trigger an initialization call to populate it
+          // We can do this by executing a mock GET_INSIGHTS or similar, or prompt the user.
+          throw new Error(`Employee profile status returned: ${res.status}`);
+        }
+        const state = await res.json();
+        currentEmployeeState = state;
+        updateUIProfile(state);
+        renderCurrentTab();
+      } catch (err) {
+        // Fallback display if not seeded yet
+        showAlert(`Could not load profile. Ensure you have run: python seed_data.py`, 'error');
+        document.getElementById('progressVal').textContent = '0%';
+        document.getElementById('progressBar').style.width = '0%';
+        updateWorkspacePlaceholder("Profile Not Found", "Run the seed script or trigger an action to initialize EMP-001.");
+      }
+    }
 
-  <h2>Response</h2>
-  <pre id="output">Ready</pre>
+    function updateUIProfile(state) {
+      if (!state) return;
+      document.getElementById('profileTrack').textContent = state.assigned_track || 'N/A';
+      document.getElementById('profileRole').textContent = state.role || 'N/A';
 
-<script>
-async function callAction(action) {
-  const employee_id = document.getElementById('employeeId').value;
-  const target_module = document.getElementById('targetModule').value || undefined;
-  let submission_payload = undefined;
-  if (action === 'SUBMIT_ANSWERS') {
-    submission_payload = document.getElementById('submissionPayload').value;
-  }
+      // Update badge
+      const badge = document.getElementById('learnerBadge');
+      badge.textContent = state.current_stage || 'INITIALIZED';
+      badge.className = `badge-status badge-${(state.current_stage || 'initialized').toLowerCase()}`;
 
-  const body = { employee_id, action };
-  if (target_module) body.target_module = target_module;
-  if (submission_payload) body.submission_payload = submission_payload;
+      // Progress calculation
+      let progress = 0;
+      const stage = state.current_stage;
+      const hasSchedule = !!state.schedule;
+      const hasActiveQuiz = !!state.active_quiz;
+      const submissionCount = (state.quiz_submissions || []).length;
 
-  const res = await fetch('/pipeline', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
+      if (stage === "COMPLETED_ASSESSMENT" || submissionCount > 0) {
+        progress = 100;
+      } else if (stage === "QUIZ_PENDING" || hasActiveQuiz) {
+        progress = 70;
+      } else if (stage === "SCHEDULED" || hasSchedule) {
+        progress = 35;
+      } else if (stage === "NEEDS_REVISION") {
+        progress = 15;
+      } else if (stage === "INITIALIZED") {
+        progress = 5;
+      }
 
-  const text = await res.text();
-  try { document.getElementById('output').textContent = JSON.stringify(JSON.parse(text), null, 2); }
-  catch (e) { document.getElementById('output').textContent = text; }
-}
+      document.getElementById('progressVal').textContent = `${progress}%`;
+      document.getElementById('progressBar').style.width = `${progress}%`;
+    }
 
-async function getState() {
-  const employee_id = document.getElementById('employeeId').value;
-  const res = await fetch(`/state/${employee_id}`);
-  const j = await res.json();
-  document.getElementById('output').textContent = JSON.stringify(j, null, 2);
-}
-async function getTelemetry() {
-  const employee_id = document.getElementById('employeeId').value;
-  const res = await fetch(`/telemetry/${employee_id}`);
-  const j = await res.json();
-  document.getElementById('output').textContent = JSON.stringify(j, null, 2);
-}
-async function getDashboard() {
-  const res = await fetch('/dashboard');
-  const j = await res.json();
-  document.getElementById('output').textContent = JSON.stringify(j, null, 2);
-}
-async function getInspection() {
-  const res = await fetch('/inspection');
-  const j = await res.json();
-  document.getElementById('output').textContent = JSON.stringify(j, null, 2);
-}
-</script>
+    function showAlert(msg, type = 'success') {
+      const banner = document.getElementById('alertBanner');
+      if (!msg) {
+        banner.style.display = 'none';
+        return;
+      }
+      banner.textContent = msg;
+      banner.style.display = 'block';
+      banner.className = `alert alert-${type}`;
+    }
+
+    function switchTab(tabName) {
+      // Remove active from buttons
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.getElementById(`tab-${tabName}`).classList.add('active');
+      currentTab = tabName;
+      renderCurrentTab();
+    }
+
+    function updateWorkspacePlaceholder(title, desc, icon = '✦') {
+      const container = document.getElementById('workspaceContent');
+      container.innerHTML = `
+        <div class="blank-slate fade-in">
+          <div class="blank-slate-icon">${icon}</div>
+          <div class="blank-slate-title">${title}</div>
+          <div class="blank-slate-desc">${desc}</div>
+        </div>
+      `;
+    }
+
+    function renderCurrentTab() {
+      const title = document.getElementById('workspaceTitle');
+      const container = document.getElementById('workspaceContent');
+
+      // Set Workspace Title
+      switch (currentTab) {
+        case 'schedule':
+          title.textContent = "Weekly Study Calendar";
+          renderSchedule(container);
+          break;
+        case 'quiz':
+          title.textContent = "Quiz & Competency Assessment";
+          renderQuiz(container);
+          break;
+        case 'dashboard':
+          title.textContent = "Team Performance Dashboard";
+          renderDashboard(container);
+          break;
+        case 'inspection':
+          title.textContent = "Audit Inspection Log";
+          renderInspection(container);
+          break;
+        case 'raw':
+          title.textContent = "Raw Telemetry / State Object";
+          renderRawJSON(container);
+          break;
+      }
+    }
+
+    // Pipeline actions executor
+    async function callAction(action) {
+      const employee_id = document.getElementById('employeeId').value;
+      const target_module = document.getElementById('targetModule').value || undefined;
+
+      showAlert("Routing reasoning request to Microsoft Foundry Agent Service...", "success");
+      updateWorkspacePlaceholder("Processing Agent Pipeline...", "Synthesizing output context across Foundry IQ, Work IQ, and Fabric IQ...", "⚙️");
+
+      const body = { employee_id, action };
+      if (target_module) body.target_module = target_module;
+
+      try {
+        const res = await fetch('/pipeline', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+
+        const result = await res.json();
+        if (!res.ok || !result.success) {
+          throw new Error(result.detail || result.error || "Execution failed");
+        }
+
+        showAlert(result.message, "success");
+
+        // Refresh local employee status
+        if (result.state) {
+          currentEmployeeState = result.state;
+          updateUIProfile(result.state);
+        }
+
+        // Auto-switch tabs to show output
+        if (action === 'GENERATE_SCHEDULE') {
+          switchTab('schedule');
+        } else if (action === 'GENERATE_QUIZ') {
+          activeQuizTemplate = result.submission_template;
+          switchTab('quiz');
+        } else if (action === 'SUBMIT_ANSWERS') {
+          switchTab('quiz');
+          loadEmployeeInfo(); // Refresh state structure
+        } else if (action === 'ENGAGEMENT_NUDGE') {
+          // Keep on current tab but refresh rendering
+          renderCurrentTab();
+        } else if (action === 'MANAGER_INSIGHTS') {
+          // Fetch manager dashboard details
+          const dashRes = await fetch('/dashboard');
+          currentDashboardData = await dashRes.json();
+          switchTab('dashboard');
+        }
+
+        // Always update the raw JSON tab with the latest transaction
+        document.getElementById('workspaceContent').classList.add('fade-in');
+
+      } catch (err) {
+        showAlert(err.message, "error");
+        updateWorkspacePlaceholder("Execution Interrupted", err.message, "⚠️");
+      }
+    }
+
+    // Dynamic rendering functions
+    function renderSchedule(container) {
+      if (!currentEmployeeState || !currentEmployeeState.schedule) {
+        updateWorkspacePlaceholder(
+          "No Schedule Available",
+          "Click 'Generate Study Schedule' on the sidebar control panel to trigger the Planner Agent.",
+          "🗓️"
+        );
+        return;
+      }
+
+      const scheduleData = currentEmployeeState.schedule.weekly_learning_schedule || currentEmployeeState.schedule;
+      const modules = scheduleData.modules_schedule || [];
+
+      if (modules.length === 0) {
+        container.innerHTML = `<div class="blank-slate"><div class="blank-slate-title">Calendar Schedule Empty</div></div>`;
+        return;
+      }
+
+      let html = `<div class="schedule-list fade-in">`;
+      modules.forEach(mod => {
+        const hours = mod.scheduled_hours || [];
+        const notes = mod.notes || "Grounded based on availability constraints and prerequisite tracking.";
+
+        html += `
+          <div class="schedule-item">
+            <div class="schedule-item-header">
+              <span class="schedule-item-title">${mod.name}</span>
+              <span class="schedule-item-id">${mod.module_id}</span>
+            </div>
+            <div class="schedule-item-slots">
+        `;
+
+        hours.forEach(slot => {
+          html += `
+            <span class="time-slot">
+              ⏱️ ${slot.day}: ${slot.start_time} - ${slot.end_time}
+            </span>
+          `;
+        });
+
+        html += `
+            </div>
+            <div class="schedule-item-notes">
+              <strong>Grounding Insight:</strong> ${notes}
+            </div>
+          </div>
+        `;
+      });
+      html += `</div>`;
+      container.innerHTML = html;
+    }
+
+    function renderQuiz(container) {
+      // Check if there are active quizzes
+      if (!currentEmployeeState) return;
+
+      const activeQuiz = currentEmployeeState.active_quiz;
+      const submissions = currentEmployeeState.quiz_submissions || [];
+
+      if (!activeQuiz) {
+        // Render historical scores if available
+        if (submissions.length > 0) {
+          const lastSub = submissions[submissions.length - 1];
+          const verdict = lastSub.verdict || {};
+          const isPassed = verdict.verdict === 'PASSED';
+          const recommendation = lastSub.advancement_recommendation || "Proceed forward.";
+
+          let histHtml = `
+            <div class="nudge-card fade-in" style="border-color: ${isPassed ? 'var(--success)' : 'var(--danger)'};">
+              <div class="nudge-header" style="color: ${isPassed ? 'var(--success)' : 'var(--danger)'};">
+                ${isPassed ? '🎉 Assessment Passed' : '⚠️ Revision Required'}
+              </div>
+              <div class="nudge-message">
+                Module: ${lastSub.module || 'Track Module'}<br/>
+                Score: <strong>${verdict.score_percentage}%</strong> (Verdict: ${verdict.verdict})
+              </div>
+              <div class="nudge-message" style="font-size: 14px; margin-top: 12px;">
+                ${verdict.feedback || ''}
+              </div>
+              
+              <div style="margin-top: 20px; padding-top:16px; border-top: 1px solid var(--border-color)">
+                <strong>Path Recommendation:</strong> ${recommendation}
+              </div>
+          `;
+
+          // If Critic gave explanations, render them
+          if (verdict.reasoning_trace && verdict.reasoning_trace.length > 0) {
+            histHtml += `
+              <div style="margin-top: 16px;">
+                <h4 style="color: var(--secondary); margin-bottom: 8px;">Critic Reasoning Trace:</h4>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+            `;
+            verdict.reasoning_trace.forEach(item => {
+              histHtml += `
+                <div class="schedule-item-notes" style="border-color: var(--danger); background: rgba(239, 68, 68, 0.03);">
+                  <strong>Question: ${item.question_id} Focus</strong><br/>
+                  <em>Gaps identified:</em> ${item.why_wrong}<br/>
+                  <em>Revision Focus:</em> ${item.syllabus_focus}<br/>
+                  <em>Action Item:</em> ${item.corrective_action}
+                </div>
+              `;
+            });
+            histHtml += `</div></div>`;
+          }
+
+          histHtml += `
+              <button class="btn btn-outline" style="margin-top: 20px;" onclick="switchTab('schedule')">
+                Back to Schedule
+              </button>
+            </div>
+          `;
+          container.innerHTML = histHtml;
+        } else {
+          updateWorkspacePlaceholder(
+            "No Active Quiz",
+            "Enter a target module in the sidebar controls and click 'Generate Grounded Quiz' to generate an assessment.",
+            "📝"
+          );
+        }
+        return;
+      }
+
+      // Render the active quiz as form elements
+      const quizName = activeQuiz.module || "Assessment Quiz";
+      const questions = activeQuiz.quiz || activeQuiz.questions || [];
+
+      let quizHtml = `
+        <div class="quiz-container fade-in">
+          <div class="quiz-meta">
+            <span>Module: <strong>${quizName}</strong></span>
+            <span>Target: <strong>2 Grounded Questions</strong></span>
+          </div>
+          <form id="quizForm" onsubmit="submitQuizAnswers(event)">
+      `;
+
+      questions.forEach((q, qIdx) => {
+        const qId = q.question_id || q.id;
+        const options = q.options || q.choices || [];
+
+        quizHtml += `
+          <div class="quiz-card" style="margin-bottom: 16px;">
+            <div class="quiz-question">${qIdx + 1}. ${q.question}</div>
+            <div class="quiz-options">
+        `;
+
+        options.forEach((opt, optIdx) => {
+          // Resolve label choice e.g. "A", "B", "C", "D"
+          const letters = ["A", "B", "C", "D"];
+          const labelLetter = letters[optIdx] || opt.substring(0, 1);
+
+          quizHtml += `
+            <label class="quiz-option" id="label-q${qId}-${labelLetter}">
+              <input type="radio" name="question_${qId}" value="${labelLetter}" required 
+                     onclick="highlightOption('${qId}', '${labelLetter}')">
+              <span><strong>${labelLetter}.</strong> ${opt}</span>
+            </label>
+          `;
+        });
+
+        quizHtml += `
+            </div>
+          </div>
+        `;
+      });
+
+      quizHtml += `
+            <button type="submit" class="btn btn-primary" style="max-width: 200px;">
+              Submit Answers
+            </button>
+          </form>
+        </div>
+      `;
+
+      container.innerHTML = quizHtml;
+    }
+
+    function highlightOption(questionId, letter) {
+      // Clear sibling highlights
+      const letters = ["A", "B", "C", "D"];
+      letters.forEach(l => {
+        const el = document.getElementById(`label-q${questionId}-${l}`);
+        if (el) el.classList.remove('selected');
+      });
+      // Highlight selected
+      const selectedEl = document.getElementById(`label-q${questionId}-${letter}`);
+      if (selectedEl) selectedEl.classList.add('selected');
+    }
+
+    async function submitQuizAnswers(e) {
+      e.preventDefault();
+      const employee_id = document.getElementById('employeeId').value;
+      const form = document.getElementById('quizForm');
+      const activeQuiz = currentEmployeeState.active_quiz;
+      const questions = activeQuiz.quiz || activeQuiz.questions || [];
+
+      const submissionPayload = {
+        submission: []
+      };
+
+      try {
+        questions.forEach(q => {
+          const qId = q.question_id || q.id;
+          const radioVal = form.elements[`question_${qId}`].value;
+          submissionPayload.submission.push({
+            question_id: qId,
+            selected_choice: radioVal
+          });
+        });
+
+        // Trigger POST submit action
+        showAlert("Grading answers using Critic / Verifier agent reasoning loop...", "success");
+        updateWorkspacePlaceholder("Grading Quiz...", "Reviewing choices and checking citations in background...", "⚖️");
+
+        const res = await fetch('/pipeline', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            employee_id,
+            action: 'SUBMIT_ANSWERS',
+            submission_payload: JSON.stringify(submissionPayload)
+          })
+        });
+
+        const result = await res.json();
+        if (!res.ok || !result.success) {
+          throw new Error(result.detail || result.error || "Grading failed");
+        }
+
+        showAlert(result.message, "success");
+        if (result.state) {
+          currentEmployeeState = result.state;
+          updateUIProfile(result.state);
+        }
+        renderCurrentTab();
+
+      } catch (err) {
+        showAlert(err.message, "error");
+        renderCurrentTab();
+      }
+    }
+
+    function renderDashboard(container) {
+      if (!currentDashboardData) {
+        updateWorkspacePlaceholder(
+          "Insights Not Loaded",
+          "Click 'Refresh Insights' in the sidebar to compile metric snapshots across all tracked learners.",
+          "📊"
+        );
+        return;
+      }
+
+      const teamSize = currentDashboardData.team_size || 0;
+      const riskScore = currentDashboardData.risk_score || 0;
+      const avgProg = currentDashboardData.average_progress || 0;
+      const riskLevel = currentDashboardData.risk_level || 'LOW';
+
+      const riskClass = `risk-level-tag risk-${riskLevel.toLowerCase()}`;
+
+      let html = `
+        <div class="fade-in">
+          <!-- Metric Scorecard -->
+          <div class="insights-grid">
+            <div class="metric-card">
+              <div class="metric-val">${teamSize}</div>
+              <div class="metric-label">Tracked Learners</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-val" style="color: var(--primary);">${avgProg}%</div>
+              <div class="metric-label">Avg. Progress</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-val">${riskScore}/100</div>
+              <div class="metric-label">Risk Index</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-val" style="font-size: 20px; padding: 6px 0;">
+                <span class="${riskClass}">${riskLevel}</span>
+              </div>
+              <div class="metric-label">Risk Level</div>
+            </div>
+          </div>
+
+          <!-- Narrative and Action Items -->
+          <div class="insights-panel">
+            <div class="insights-list-box">
+              <div class="insights-list-title">Risk Flags & Delivery Gaps</div>
+              <div class="insights-list">
+      `;
+
+      const flags = currentDashboardData.risk_flags || [];
+      flags.forEach(flag => {
+        html += `<div class="insights-list-item">${flag}</div>`;
+      });
+
+      html += `
+              </div>
+              
+              <div class="insights-list-title" style="margin-top: 16px;">Recommended Mitigations</div>
+              <div class="insights-list">
+      `;
+
+      const actions = currentDashboardData.recommended_actions || [];
+      actions.forEach(act => {
+        html += `<div class="insights-list-item action">${act}</div>`;
+      });
+
+      html += `
+              </div>
+            </div>
+
+            <div class="manager-narrative-box">
+              <h4 style="color: #fff; margin-bottom: 8px; font-family: var(--font-display);">Executive Briefing</h4>
+              <p>${currentDashboardData.manager_narrative || 'No explanation generated yet.'}</p>
+            </div>
+          </div>
+
+          <!-- Employee Listing Table -->
+          <h4 style="color: #fff; font-family: var(--font-display); margin-bottom: 8px;">Employee Readiness Ledger</h4>
+          <table class="team-table">
+            <thead>
+              <tr>
+                <th>Learner</th>
+                <th>Role</th>
+                <th>Stage</th>
+                <th style="width: 150px;">Progress</th>
+                <th>Sched.</th>
+                <th>Quiz</th>
+                <th>Submissions</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      const employees = currentDashboardData.employees || [];
+      employees.forEach(emp => {
+        html += `
+          <tr>
+            <td><strong>${emp.employee_id}</strong></td>
+            <td>${emp.role}</td>
+            <td>
+              <span class="badge-status badge-${(emp.stage_label || 'initialized').toLowerCase()}">
+                ${emp.stage_label || 'Initialized'}
+              </span>
+            </td>
+            <td>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-weight:600; width: 35px;">${emp.progress_percentage}%</span>
+                <div class="progress-bar-container" style="flex:1;">
+                  <div class="progress-bar-fill" style="width: ${emp.progress_percentage}%;"></div>
+                </div>
+              </div>
+            </td>
+            <td>${emp.has_schedule ? '✅' : '❌'}</td>
+            <td>${emp.has_quiz ? '📝' : '➖'}</td>
+            <td><strong>${emp.submissions}</strong> submit(s)</td>
+          </tr>
+        `;
+      });
+
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      container.innerHTML = html;
+    }
+
+    async function getInspection() {
+      showAlert("Fetching system configuration audit trace logs...", "success");
+      updateWorkspacePlaceholder("Querying Audit Telemetry...", "Reassembling steps...", "🔍");
+
+      try {
+        const res = await fetch('/inspection');
+        currentInspectionReport = await res.json();
+        switchTab('inspection');
+      } catch (err) {
+        showAlert(err.message, "error");
+        renderCurrentTab();
+      }
+    }
+
+    function renderInspection(container) {
+      if (!currentInspectionReport) {
+        updateWorkspacePlaceholder(
+          "Logs Not Loaded",
+          "Click 'Inspect Logs' in the workspace tabs or sidebar panel to query the system telemetries.",
+          "🔍"
+        );
+        return;
+      }
+
+      const log = currentInspectionReport.inspection_log || [];
+
+      let html = `
+        <div class="fade-in">
+          <div class="inspection-stats">
+            <span>Active State File: <strong>${currentInspectionReport.state_file}</strong></span>
+            <span>Registered Employees: <strong>${currentInspectionReport.employee_count}</strong></span>
+            <span>Total Events Logged: <strong>${log.length}</strong></span>
+          </div>
+          
+          <div class="inspection-timeline">
+      `;
+
+      if (log.length === 0) {
+        html += `<div class="blank-slate"><div class="blank-slate-title">No audit telemetry logged yet.</div></div>`;
+      } else {
+        // Render logs in reverse chronological order
+        const revLog = [...log].reverse();
+        revLog.forEach((event, idx) => {
+          html += `
+            <div class="timeline-event ${idx === 0 ? 'active' : ''}">
+              <div class="event-header">
+                <span class="event-action">${event.action}</span>
+                <span class="schedule-item-id" style="font-size:10px;">User: ${event.employee_id || 'System'}</span>
+              </div>
+              <div class="event-note">${event.note || 'Workflow transformation event.'}</div>
+              <details class="event-details">
+                <summary style="cursor:pointer; color: var(--primary);">View Transition Payloads</summary>
+                <div style="margin-top: 8px;">
+                  <strong>Arguments Passed:</strong>
+                  <pre style="margin-top: 4px; padding: 8px; max-height:150px;">${JSON.stringify(event.inputs, null, 2)}</pre>
+                </div>
+                <div style="margin-top: 8px;">
+                  <strong>Stage State Transition:</strong>
+                  <pre style="margin-top: 4px; padding: 8px; max-height:150px;">${JSON.stringify(event.before_state, null, 2)} ➔ ${JSON.stringify(event.after_state, null, 2)}</pre>
+                </div>
+              </details>
+            </div>
+          `;
+        });
+      }
+
+      html += `
+          </div>
+        </div>
+      `;
+
+      container.innerHTML = html;
+    }
+
+    function renderRawJSON(container) {
+      let data = {};
+      if (currentEmployeeState) {
+        data = {
+          current_employee_state: currentEmployeeState,
+          inspection_report: currentInspectionReport || "Tab 'Audit Logs' not queried yet.",
+          manager_dashboard: currentDashboardData || "Tab 'Manager Dashboard' not queried yet."
+        };
+      } else {
+        data = { status: "Profile not loaded. Perform an action to seed mock registers." };
+      }
+
+      container.innerHTML = `
+        <div class="fade-in">
+          <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">
+            Telemetry storage values currently written in <code>data/system_telemetry.json</code> and <code>data/session_state.json</code>:
+          </p>
+          <pre>${JSON.stringify(data, null, 2)}</pre>
+        </div>
+      `;
+    }
+  </script>
 </body>
+
 </html>

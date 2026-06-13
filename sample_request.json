@@ -1,0 +1,15 @@
+{
+  "employee_id": "EMP-001",
+  "track_id": "AZ-204",
+  "employee_profile": {
+    "role": "Cloud Engineer",
+    "department": "Engineering"
+  },
+  "context_data": "{}",
+  "schedule_base_path": "./data/work_iq.json",
+  "fabric_base_path": "./data/fabric_iq.json",
+  "work_base_path": "./data/work_iq.json",
+  "knowledge_base_path": "./data/foundry_iq.json",
+  "session_state_path": "./data/session_state.json",
+  "telemetry_path": "./data/system_telemetry.json"
+}

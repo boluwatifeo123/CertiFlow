@@ -2,7 +2,7 @@
     "employees": {
         "EMP-001": {
             "assigned_track": "TRACK-AZ-ADMIN",
-            "current_stage": "COMPLETED_ASSESSMENT",
+            "current_stage": "NEEDS_REVISION",
             "active_quiz": null
         }
     }

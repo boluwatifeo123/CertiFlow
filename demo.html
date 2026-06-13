@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CertiFlow — Reasoning Enterprise Learning Platform</title>
+  <link rel="stylesheet" href="static/style.css" />
+</head>
+<body>
+  <!-- Header Panel -->
+  <header>
+    <div class="logo-container">
+      <div class="logo-icon">CF</div>
+      <div>
+        <h1>CertiFlow</h1>
+        <div class="subtitle">Multi-Agent Enterprise Learning</div>
+      </div>
+    </div>
+    <div class="user-selector">
+      <label for="employeeId">Select Employee Profile:</label>
+      <select id="employeeId" onchange="loadEmployeeInfo()">
+        <option value="EMP-001">EMP-001 (Cloud Ops Associate)</option>
+        <option value="EMP-002">EMP-002 (Custom Demo Profile)</option>
+      </select>
+      <button class="btn btn-outline" style="padding: 6px 12px; font-size:11px;" onclick="loadEmployeeInfo()">Refresh State</button>
+    </div>
+  </header>
+
+  <!-- Alert Banner -->
+  <div id="alertBanner" class="alert" style="display: none;"></div>
+
+  <!-- Dashboard Grid -->
+  <div class="dashboard-grid">
+    <!-- Sidebar Controls -->
+    <div class="sidebar">
+      <!-- Employee Profile / State Panel -->
+      <div class="panel">
+        <div class="panel-title">
+          <span>Learner Profile</span>
+          <span id="learnerBadge" class="badge-status badge-initialized">Initialized</span>
+        </div>
+        <div class="status-card">
+          <div class="status-row">
+            <span class="status-label">Assigned Track:</span>
+            <span class="status-val" id="profileTrack">TRACK-AZ-ADMIN</span>
+          </div>
+          <div class="status-row">
+            <span class="status-label">Business Role:</span>
+            <span class="status-val" id="profileRole">Synthetic Cloud Operations Associate</span>
+          </div>
+          <div style="margin-top: 6px;">
+            <div class="status-row" style="margin-bottom: 4px;">
+              <span class="status-label">Estimated Progress:</span>
+              <span class="status-val" id="progressVal">0%</span>
+            </div>
+            <div class="progress-bar-container">
+              <div class="progress-bar-fill" id="progressBar" style="width: 0%;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Panel -->
+      <div class="panel">
+        <div class="panel-title">Orchestration Control Plane</div>
+        <div class="action-list">
+          <div class="input-group">
+            <label>1. Planning Phase</label>
+            <button class="btn btn-primary" onclick="callAction('GENERATE_SCHEDULE')">🗓️ Generate Study Schedule</button>
+          </div>
+          <div class="input-group">
+            <label>2. Engagement Trigger</label>
+            <button class="btn btn-secondary" onclick="callAction('ENGAGEMENT_NUDGE')">💬 Get Best Study Window Nudge</button>
+          </div>
+          <div class="input-group">
+            <label>3. Assessment Modules</label>
+            <input id="targetModule" class="input-control" type="text" value="Module 1: Core Compute & Storage Fabric" placeholder="Enter target module name" />
+            <button class="btn btn-outline" style="margin-top: 8px;" onclick="callAction('GENERATE_QUIZ')">📝 Generate Grounded Quiz</button>
+          </div>
+          <div class="input-group" style="margin-bottom: 0; border-top: 1px solid var(--border-color); padding-top: 16px;">
+            <label>Manager Oversight & Inspection</label>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-outline" style="flex: 1;" onclick="callAction('MANAGER_INSIGHTS')">📊 Refresh Insights</button>
+              <button class="btn btn-outline" style="flex: 1;" onclick="getInspection()">🔍 Inspect Logs</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Workspace -->
+    <div class="panel" style="min-height: 550px;">
+      <div class="workspace-header">
+        <div class="workspace-title" id="workspaceTitle">Study Plan & Schedule</div>
+        <div class="tabs-nav">
+          <button class="tab-btn active" id="tab-schedule" onclick="switchTab('schedule')">Schedule</button>
+          <button class="tab-btn" id="tab-quiz" onclick="switchTab('quiz')">Quiz Assessment</button>
+          <button class="tab-btn" id="tab-dashboard" onclick="switchTab('dashboard')">Manager Dashboard</button>
+          <button class="tab-btn" id="tab-inspection" onclick="switchTab('inspection')">Audit Logs</button>
+          <button class="tab-btn" id="tab-raw" onclick="switchTab('raw')">Raw JSON</button>
+        </div>
+      </div>
+      <div class="workspace-body fade-in" id="workspaceContent">
+        <!-- Renderings injected dynamically via Javascript -->
+      </div>
+    </div>
+  </div>
+
+  <script src="static/script.js"></script>
+</body>
+</html>
