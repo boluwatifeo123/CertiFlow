@@ -1,4 +1,4 @@
-// static/script.js – Handles UI interactions and calls the Flask backend
+// static/script.js - Legacy helper kept in sync with the FastAPI backend.
 
 // Helper to display alerts
 function showAlert(message, type = "info") {
@@ -22,10 +22,17 @@ function loadEmployeeInfo() {
 async function callAction(action) {
   try {
     showAlert(`Calling ${action}…`, "info");
-    const response = await fetch("/run", {
+    const employee_id = document.getElementById("employeeId").value;
+    const targetModuleInput = document.getElementById("targetModule");
+    const body = { employee_id, action };
+    if (targetModuleInput && targetModuleInput.value) {
+      body.target_module = targetModuleInput.value;
+    }
+
+    const response = await fetch("/pipeline", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action }),
+      body: JSON.stringify(body),
     });
     if (!response.ok) throw new Error(`Server error ${response.status}`);
     const data = await response.json();

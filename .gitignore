@@ -6,6 +6,7 @@ ENV/
 # Environment configurations containing secrets
 .env
 .env.local
+.env.*
 
 # Operating system files
 .DS_Store
@@ -15,12 +16,33 @@ Thumbs.db
 __pycache__/
 *.py[cod]
 *$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
+# Runtime logs and scratch output
+logs/
+*.log
+texts/
+data/session_state.json
+data/system_telemetry.json
+CertiFlow_submission.zip
 
+# Local build / packaging leftovers
+.docker/
+dist/
+build/
+*.egg-info/
 
+# Editor / IDE metadata
+.vscode/
+.idea/
+
+# One-off local test / scratch files
 orchestrator_test.py
 orchestrator_test.txt
 orchestrator_test2.txt
+demo.html
+demo_server.py
+PRESENTATION.md
 seed_data.py
-
-tests/

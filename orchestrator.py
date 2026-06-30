@@ -3,6 +3,7 @@ import json
 import re
 import sys
 from copy import deepcopy
+from pathlib import Path
 from typing import Any, Optional
 
 from dotenv import load_dotenv
@@ -12,6 +13,9 @@ from azure.identity import DefaultAzureCredential
 from azure.ai.projects import AIProjectClient
 
 load_dotenv()
+
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "data"
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -925,8 +929,8 @@ class CertiFlowOrchestrator:
     """Manages system state transformations across asynchronous workflow boundaries."""
     def __init__(
         self,
-        state_file: str = "data/session_state.json",
-        telemetry_file: str = "data/system_telemetry.json",
+        state_file: str = str(DATA_DIR / "session_state.json"),
+        telemetry_file: str = str(DATA_DIR / "system_telemetry.json"),
     ):
         self.state_file = state_file
         self.telemetry_file = telemetry_file
@@ -1091,9 +1095,9 @@ def run_pipeline_step(target_employee_id: str, requested_action: str, target_mod
 
 def run_pipeline_step_with_result(target_employee_id: str, requested_action: str, target_module: str = None, submission_payload: str = None) -> dict:
     """Run a pipeline step and return structured results for API or programmatic use."""
-    foundry_iq_path = "data/foundry_iq.json"
-    work_iq_path = "data/work_iq.json"
-    fabric_iq_path = "data/fabric_iq.json"
+    foundry_iq_path = str(DATA_DIR / "foundry_iq.json")
+    work_iq_path = str(DATA_DIR / "work_iq.json")
+    fabric_iq_path = str(DATA_DIR / "fabric_iq.json")
 
     result = {
         "employee_id": target_employee_id,
@@ -1224,8 +1228,8 @@ def run_pipeline_step_with_result(target_employee_id: str, requested_action: str
 
         elif requested_action == "MANAGER_INSIGHTS":
             manager_agent = ManagerInsightsAgent(
-                session_state_path="data/session_state.json",
-                telemetry_path="data/system_telemetry.json",
+                session_state_path=str(DATA_DIR / "session_state.json"),
+                telemetry_path=str(DATA_DIR / "system_telemetry.json"),
                 fabric_base_path=fabric_iq_path,
                 ai_engine=ai_engine,
             )

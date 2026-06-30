@@ -1,175 +1,83 @@
-# CertiFlow – Multi‑Agent Learning Orchestrator
+# CertiFlow
 
-## Overview
+CertiFlow is a synthetic multi-agent learning orchestrator demo. It simulates a learner journey across:
 
-*CertiFlow* is a reference implementation of the **Reasoning Agents – Starter Kit** challenge. It demonstrates a multi‑agent system that:
+- Study planning
+- Engagement nudges
+- Quiz generation and grading
+- Manager dashboard insights
 
-1. **Curates learning paths** (CuratorAgent – not wired yet).
-2. **Generates a study schedule** (PlannerAgent).
-3. **Sends contextual nudges** (EngagementAgent) using Work‑IQ signals.
-4. **Creates and evaluates quizzes** (TesterAgent) grounded in Foundry‑IQ.
-5. **Provides manager‑level insights** (ManagerInsightsAgent).
+The canonical app is now the FastAPI backend in [`api.py`](./api.py) plus the interactive GUI in [`static/index.html`](./static/index.html).
 
-The core orchestration lives in `main.py`, which loads a JSON request, initializes the Azure AI engine (or fails fast if the required env vars are missing), runs each agent, and prints a combined JSON payload.
+## What Runs Where
 
----
+- [`app.py`](./app.py) is the main launch entrypoint.
+- [`api.py`](./api.py) exposes the GUI backend routes.
+- [`main.py`](./main.py) runs the same pipeline from the command line.
+- [`orchestrator.py`](./orchestrator.py) holds the agent logic and state manager.
+- [`static/index.html`](./static/index.html) is the interactive UI served by the backend.
 
-# CertiFlow – Multi‑Agent Learning Orchestrator
+## Quick Start
 
-## Quick Start (Local Development)
+```powershell
+.\.venv\Scripts\Activate.ps1
+python app.py
+```
 
-```bash
-# Clone the repo and cd into it
-git clone <repo-url>
-cd CertiFlow
+Then open:
 
-# Create a virtual environment
-python -m venv .venv
-.\.venv\Scripts\activate   # PowerShell on Windows
+```text
+http://127.0.0.1:8000/
+```
 
-# Install dependencies
-pip install -r requirements.txt
+That page gives you the full graphical interface. You can:
 
-# Populate a .env file (see .env.example) with Azure AI credentials.
-# Minimum required variables:
-#   AZURE_AI_PROJECT_ENDPOINT
-#   AZURE_AI_MODEL_DEPLOYMENT
-#   AZURE_AI_SUBSCRIPTION_ID (optional)
+- generate a study schedule
+- generate a quiz
+- submit answers
+- view manager insights
+- inspect telemetry
 
-# Run the orchestrator with the sample request
+For the agent actions to execute, make sure `.env` contains the Azure AI values used by `AzureAIEngine`, especially:
+
+- `AZURE_AI_PROJECT_ENDPOINT`
+- `AZURE_AI_MODEL_DEPLOYMENT`
+
+If you prefer the command line demo:
+
+```powershell
 python main.py --request sample_request.json
 ```
 
-## Demo UI (Flask Server)
+## Docker
 
-```bash
-# Start the Flask demo server
-python demo_server.py
+```powershell
+docker build -t certiflow .
+docker run -p 8000:8000 certiflow
 ```
 
-Open `demo.html` in a browser (or navigate to `http://localhost:5000/demo.html`) to interact with the UI.
+## Data Files
 
-## Docker Deployment
+The app uses synthetic JSON data in [`data/`](./data):
 
-```bash
-# Build the Docker image
-docker build -t certiflow-demo .
+- `foundry_iq.json`
+- `fabric_iq.json`
+- `work_iq.json`
+- `session_state.json`
+- `system_telemetry.json`
 
-# Run the container
-docker run -p 5000:5000 certiflow-demo
-```
+## Safety
 
-The app will be available at `http://localhost:5000`.
+[`safety.py`](./safety.py) provides lightweight request validation plus helper utilities for sanitization and schema checks.
 
-## CI Workflow (GitHub Actions)
+## Notes
 
-A minimal CI workflow runs linting and basic tests on push:
-```yaml
-name: CI
-on: [push, pull_request]
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Run lint
-        run: flake8 .
-      - name: Run tests
-        run: pytest
-```
+- The legacy `demo.html` page now redirects to the main app path.
+- `demo_server.py` remains as a compatibility launcher, but `python app.py` is the preferred startup command.
+- Generated runtime logs are written to `logs/`.
 
-Add this file as `.github/workflows/ci.yml`.
+## Next Improvements
 
----
-
-```bash
-# Clone the repo and cd into it
-git clone <repo‑url>
-cd CertiFlow
-
-# Create a virtual environment
-python -m venv .venv
-.\.venv\Scripts\activate   # PowerShell on Windows
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Populate a .env file (see .env.example) with Azure AI credentials.
-# Minimum required variables:
-#   AZURE_AI_PROJECT_ENDPOINT
-#   AZURE_AI_MODEL_DEPLOYMENT
-#   AZURE_AI_SUBSCRIPTION_ID (optional)
-
-# Run the orchestrator with the sample request
-python main.py --request sample_request.json
-```
-
-The script prints a JSON object containing:
-- The original request
-- `schedule` – the generated weekly learning schedule (or an error object)
-- `nudge` – a low‑disruption reminder
-- `performance` – quiz evaluation result
-- `dashboard` – manager insights summary
-
----
-
-## Demo UI (Optional)
-
-A lightweight static UI lives in `demo.html` and uses `static/style.css`. Open the file in a browser to see a formatted view of the sample request and a placeholder for the orchestrator output. The UI is purely visual – you still run `main.py` locally to generate the data.
-
----
-
-## Observability & Telemetry
-
-All agents now import `logger.py` which defines a `JSONLogger` that writes structured log entries to `./data/telemetry.log` (JSON‑lines). Example log entry:
-```json
-{"timestamp":"2026-06-13T19:58:00Z","component":"PlannerAgent","event":"schedule_generated","employee_id":"EMP-001","duration_ms":123}
-```
-The logger is used throughout `main.py` and each agent to capture start/end events, errors, and key payload sizes.
-
----
-
-## Responsible‑AI Guardrails
-
-The new module `safety.py` provides:
-- `sanitize_input(data: dict) -> dict` – strips any keys that look like PII (e.g., `email`, `ssn`).
-- `ensure_json_schema(payload: dict, schema: dict) -> bool` – validates that agent outputs conform to the expected JSON schema.
-- A global disclaimer printed by `main.py` before any processing:
-  > **Disclaimer:** This demo uses synthetic data only. No real user data is processed. All outputs are generated by AI models and should be reviewed by a human before any production use.
-
----
-
-## Deployment Story
-
-The reference deployment targets **Microsoft Foundry Agent Service**:
-1. **Containerisation** – a `Dockerfile` builds a slim Python image (`python:3.11‑slim`).
-2. **Environment** – the container expects the same `.env` variables; Azure Managed Identity can replace them in production.
-3. **Entry point** – the container runs `python -m uvicorn app:app --host 0.0.0.0 --port 8080` where `app.py` wraps the orchestration logic in a FastAPI HTTP endpoint.
-4. **Hosted Agent registration** – push the image to Azure Container Registry, then create a Hosted Agent in Foundry pointing to the image.
-
-The repo contains a minimal `Dockerfile` and a stub `app.py` (FastAPI) for this purpose.
-
----
-
-## Styling – Premium UI (Glassmorphism)
-
-`static/style.css` now uses a dark‑mode palette, subtle glass‑like cards, smooth hover transitions, and a vibrant gradient header. The design follows modern best‑practice aesthetics and works across desktop browsers.
-
----
-
-## Next Steps
-
-- Implement the **CuratorAgent** to fetch learning modules from `foundry_iq.json`.
-- Connect real Work‑IQ signals (replace placeholder `work_iq.json`).
-- Extend the FastAPI endpoint to accept live requests.
-- Add unit tests for each agent (see `tests/` directory).
-
----
-
-*Happy hacking!*
+- Add automated tests for the safety helpers and backend routes.
+- Add a single source of truth for all UI state transformations.
+- Persist runtime telemetry in a more explicit database or storage layer if this grows beyond demo usage.

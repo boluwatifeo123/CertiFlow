@@ -1,9 +1,9 @@
 {
   "employee_id": "EMP-001",
-  "track_id": "AZ-204",
+  "track_id": "TRACK-AZ-ADMIN",
   "employee_profile": {
-    "role": "Cloud Engineer",
-    "department": "Engineering"
+    "role": "Synthetic Cloud Operations Associate",
+    "department": "Engineering-A"
   },
   "context_data": "{}",
   "schedule_base_path": "./data/work_iq.json",
